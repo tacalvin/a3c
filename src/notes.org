@@ -1,0 +1,22 @@
+*** TODO Read Theory
+    
+
+* Notes
+** RL-Review
+*** Agent exists in an environment
+*** Receives an award R and an observed state S
+*** Actions are determined by a stochastic policy pi(s)
+**** Stochastic meaning it does not output a single action but a probability distribution of over all possible actions
+**** This results in pi(a|S)
+*** We than use the concept of expectation and expect a value X in the probability distribution P
+**** \[ E_p[X] = \sum_i P_iX_i \]
+**** We can than define a value function V(s) of policy \[ \pi \]
+***** This gets us this function \[ V(S) = E_{\pi(S)}[r + \gamma V(s') \]
+**** The action value function Q(s,a) is defined as 
+***** \[Q(S,A) = r + \gamma V(S') \]
+**** We can than get the function A(S,A) = Q(S,A) - V(S)
+***** This is called the advantage function and expresses how good an action A is in state S compared to the average.
+***** If higher the function is negative if lower it is negative
+**** We want the policy to improve so we need to define the reward function which the policy \[ \pi \] can gain
+***** \[ J(\pi) = E_{P^S_0} [V(S_0)] \]
+**** That function has a gradient in the form of \[ \bigtriangledown_\theta J(\pi) = E_{S~\rho^\pi,a~\pi(s)}[A(S,A) \dot \bigtriangledown_\theta log \pi (A|S)] \]
