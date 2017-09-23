@@ -1,8 +1,7 @@
 import time,threading
 
 import gym
-from universe import envs
-from a3c import Agent
+#from a3c import Agent
 
 #-- constants
 ENV = 'CartPole-v0'
@@ -32,7 +31,7 @@ class Enviroment(threading.Thread):
 
     stop_signal = False
 
-    def __init__(self, render=True, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS):
+    def __init__(self, Agent, render=True, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS ):
         threading.Thread.__init__(self)
 
         self.redner = render
@@ -47,6 +46,8 @@ class Enviroment(threading.Thread):
          s = self.env.reset()
          while True:
              time.sleep(THREAD_DELAY)
+             if self.render:
+                 self.env.render()
 
              a = self.agent.act(s)
              s_, r, done, info = self.env.step(a)

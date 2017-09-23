@@ -1,5 +1,9 @@
-*** TODO Read Theory
-    
+* TODO  
+**  [X] Read Theory
+**  [] Implement A3C   
+**  [] Implement ICM
+**  [] Remove Keras Code and Replace With Pure Tensorflow
+
 
 * Notes
 ** RL-Review
@@ -20,3 +24,19 @@
 **** We want the policy to improve so we need to define the reward function which the policy \[ \pi \] can gain
 ***** \[ J(\pi) = E_{P^S_0} [V(S_0)] \]
 **** That function has a gradient in the form of \[ \bigtriangledown_\theta J(\pi) = E_{S~\rho^\pi,a~\pi(s)}[A(S,A) \dot \bigtriangledown_\theta log \pi (A|S)] \]
+     
+* Implementation Notes
+** Our final loss function is as follows
+*** L_\pi = -1/n \sum^n_{i=1} A(S_i,a_i) log(\pi(A_i|S_i)
+** Learning V(S) is analogous to a Q learning problem and this should meet the Bellman Equation 
+*** The Loss function is calculated as a mean squared error
+**** L_V = 1/n \sum^n_{i=1} e^2_i
+** Adding entropy to a loss function prevents a premature convergence
+*** Entropy defined for \pi(s) is H(\pi(S) = -\sum^n_{k=1} \pi(s)_k \dot log(\pi(s)_k)
+** log(\pi(a|s)) means essentially that we choose the a'th index of \pi(s) or the probability of action a in state s
+*** In tensorflow this is done by multiplyin by a one hot encoded action and summed which will give us what we want
+* Questions
+** What is the reason on why the reward calculation for a terminal state vs an n return step different
+** How is the initial reward reward + r (GAMMA ** NUM_STEP_RETURN)/ GAMMA simplified
+** Why is the L_\pi = -J(\pi)
+** How does multipying by a one hot encoded action to the policy get us the a'th action 
