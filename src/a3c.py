@@ -8,6 +8,8 @@ from keras import backend as K
 import tensorflow as tf
 ENV = 'CartPole-v0'
 
+
+
 RUN_TIME = 30
 THREADS = 8
 OPTIMIZERS = 2
@@ -24,6 +26,17 @@ EPS_STEPS = 75000
 
 MIN_BATCH = 32
 LEARNING_RATE = 5e-3
+
+   # entropy coefficient
+RUN_TIME = 30
+THREADS = 8
+OPTIMIZERS = 2
+THREAD_DELAY = 0.001
+
+
+
+
+
 
 
 GAMMA = .99
@@ -101,6 +114,7 @@ class Policy:
 
 
     def train_push(self, s, a, r, s_):
+        # print("PUSHING: {}".format(s.shape))
         with self.lock_queue:
             self.train_queue[0].append(s)
             self.train_queue[1].append(a)
@@ -164,15 +178,18 @@ class Policy:
 
     def predict(self, s):
         with self.default_graph.as_default():
+
             return self.model.predict(s)
 
     def predict_v(self, s):
         with self.default_graph.as_default():
+ 
             p,v = self.model.predict(s)
             return v
 
     def predict_p(self,s):
         with self.default_graph.as_default():
+
             p,v = self.model.predict(s)
             return p
 
@@ -195,30 +212,36 @@ class Agent:
         if(frames >= self.eps_step):
             return self.eps_stop
         else:
-            return self.eps_start + frames * (self.eps_end - self.eps_start) /self.eps_step
+            return self.eps_start + frames * (self.eps_stop - self.eps_start) /self.eps_step
 
     #WHY: why is it when an agent acts is the answer chosen randomly from the distribution
     def act(self, state):
         epsilon = self.getEpsilon()
-        
+        global frames; frames = frames + 1
+        # print("ACT {}".format(state.shape))
         if random.random() < epsilon:
             return random.randint(0,NUM_ACTIONS-1)
         else:
-            p = policy.predict(state)
-            return np.random.choice(NUM_ACTIONs,p=p)
+            s = np.array([state])
+            p = policy.predict_p(s)[0]
+            a = np.random.choice(NUM_ACTIONS,p=p)
+            return a
 
     #Will grab the current state, action, reward and s_
-    def getSample(self,numStep):
-        s, a, _, _ = self.memory[0]
-        _, _, _, s_ = self.memory[numStep-1]
-
-        return s, a, self.R, s_
+    
 
 
     def train(self, s, a, r, s_):
+        def getSample(memory,numStep):
+            s, a, _, _ = memory[0]
+            _, _, _, s_ = memory[numStep-1]
+
+            return s, a, self.reward, s_
         a_cats = np.zeros(NUM_ACTIONS)
         a_cats[a] = 1
 
+        # print("wut",s.shape)
+        # quit()
         self.memory.append((s, a_cats, r, s_))
 
         #Simplified relation of reward instead of scanning through memory and summing them up
@@ -229,16 +252,17 @@ class Agent:
         if s_ is None:
             while(len(self.memory)) > 0:
                 n = len(self.memory)
-                s, a, r, s_ = self.getSample(n)
+                s, a, r, s_ = getSample(self.memory, n)
                 policy.train_push(s, a, r, s_)
 
                 #What happens to GAMMA_N (GAMMA**NUM_STEP_RETURN)
                 self.reward = (self.reward -self.memory[0][2]) / GAMMA
+                self.memory.pop(0)
             self.reward = 0
 
         #computes when there is enough states in buffer
         if len(self.memory) >= NUM_STEP_RETURN:
-            s, a, r, s_ = self.getSample(NUM_STEP_RETURN)
+            s, a, r, s_ = getSample(self.memory, NUM_STEP_RETURN)
             policy.train_push(s, a, r, s_)
 
             #Why is the reward now just a difference
@@ -261,51 +285,91 @@ class Optimizer(threading.Thread):
         self.stop_signal = True
 
 
-
-
-class Enviroment(threading.Thread):
-    """"Enviroment for running A3C agents"""
-
+class Environment(threading.Thread):
     stop_signal = False
 
-    def __init__(self,render=True, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS ):
+    def __init__(self, render=False, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS):
         threading.Thread.__init__(self)
 
-        self.redner = render
+        self.render = render
         self.env = gym.make(ENV)
-        self.agent = Agent(eps_start,eps_end,eps_steps)
-        print("MADE IT HERE")
+        self.agent = Agent(eps_start, eps_end, eps_steps)
+
+    def runEpisode(self):
+        s = self.env.reset()
+
+        R = 0
+        while True:         
+            time.sleep(THREAD_DELAY) # yield 
+
+            if self.render: self.env.render()
+
+            a = self.agent.act(s)
+            s_, r, done, info = self.env.step(a)
+
+            if done: # terminal state
+                s_ = None
+
+            self.agent.train(s, a, r, s_)
+
+            s = s_
+            R += r
+
+            if done or self.stop_signal:
+                break
+
+        print("Total R:", R)
 
     def run(self):
         while not self.stop_signal:
             self.runEpisode()
 
-    def runEpisode(self):
-         s = self.env.reset()
-         R = 0
-         print("BEFORE")
-         while True:
-             time.sleep(THREAD_DELAY)
-             if self.render:
-                 self.env.render()
-
-             a = self.agent.act(s)
-             s_, r, done, info = self.env.step(a)
-
-             if done:
-                 s_ = None
-             self.agent.train(s,a,r,s_)
-             s = s_
-             R += r
-             if done or self.stop_signal:
-                 break
-         print("Total R:", R)
     def stop(self):
         self.stop_signal = True
 
-#main program here
+# class Enviroment(threading.Thread):
+#     """"Enviroment for running A3C agents"""
 
-env_test = Enviroment(Agent, eps_start = 0., eps_end = 0.)
+#     stop_signal = False
+
+#     def __init__(self,render=True, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS ):
+#         threading.Thread.__init__(self)
+
+#         self.redner = render
+#         self.env = gym.make(ENV)
+#         self.agent = Agent(eps_start,eps_end,eps_steps)
+#         print("MADE IT HERE")
+
+#     def run(self):
+#         while not self.stop_signal:
+#             self.runEpisode()
+
+#     def runEpisode(self):
+#          s = self.env.reset()
+#          R = 0
+#          print("BEFORE")
+#          while True:
+#              time.sleep(THREAD_DELAY)
+#              if self.render:
+#                  self.env.render()
+
+#              a = self.agent.act(s)
+#              s_, r, done, info = self.env.step(a)
+
+#              if done:
+#                  s_ = None
+#              self.agent.train(s,a,r,s_)
+#              s = s_
+#              R += r
+#              if done or self.stop_signal:
+#                  break
+#          print("Total R:", R)
+#     def stop(self):
+#         self.stop_signal = True
+
+#main program here
+           
+env_test = Environment(render=True, eps_start = 0., eps_end = 0.)
 NUM_STATE = env_test.env.observation_space.shape[0]
 NUM_ACTIONS = env_test.env.action_space.n
 NONE_STATE = np.zeros(NUM_STATE)
@@ -315,17 +379,17 @@ NONE_STATE = np.zeros(NUM_STATE)
 policy = Policy()
 
 
-envs = [Enviroment() for i in range(THREADS)]
+envs = [Environment() for i in range(THREADS)]
 opts = [Optimizer() for i in range(OPTIMIZERS)]
 
 
 print("RUNNING")
 print(len(opts))
 for o in opts:
-    o.run()
+    o.start()
 
 for e in envs:
-    e.run()
+    e.start()
 
 time.sleep(RUN_TIME)
 
