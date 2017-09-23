@@ -1,12 +1,30 @@
 import time,threading
 import random
 import numpy as np
+import gym
 from keras.models import *
 from keras.layers import *
 from keras import backend as K
-from env import Enviroment
-from env import *
 import tensorflow as tf
+ENV = 'CartPole-v0'
+
+RUN_TIME = 30
+THREADS = 8
+OPTIMIZERS = 2
+THREAD_DELAY = 0.001
+
+GAMMA = 0.99
+
+N_STEP_RETURN = 8
+GAMMA_N = GAMMA ** N_STEP_RETURN
+
+EPS_START = 0.4
+EPS_STOP  = .15
+EPS_STEPS = 75000
+
+MIN_BATCH = 32
+LEARNING_RATE = 5e-3
+
 
 GAMMA = .99
 NUM_STEP_RETURN = 8
@@ -95,24 +113,53 @@ class Policy:
                 self.train_queue[3].append(s_)
                 self.train_queue[4].append(1.)
     def optimize(self):
+        #if len(self.train_queue[0]) < MIN_BATCH:
+        #    time.sleep(0) #Yield here
+        #    return
+        #print("MADE IT")
+        #with self.lock_queue:
+        #    if len(self.train_queue[0]) < MIN_BATCH:
+        #        return
+
+        #    s, a, r, s_, s_mask = self.train_queue
+        #    self.train_queue = [[], [], [], [], []]
+
+        #s = np.vstack(s)
+        #a = np.vstack(a)
+        #r = np.vstack(r)
+        #s_ = np.vstack(s_)
+        #s_mask = np.vstack(s_mask);print("Optimizing")
+
+        #v = self.predict_v(s_)
+        #r = r + (GAMMA ** NUM_STEP_RETURN) * v *s_mask
+
+        #s_t, a_t, r_t, minimize = self.graph
+        #print("Presesh")
+        #self.session.run(minimize, feed_dict = {s_t: s, a_t: a, r_t: r})
+
         if len(self.train_queue[0]) < MIN_BATCH:
-            time.sleep(0) #Yield here
+            time.sleep(0)    # yield
             return
+
         with self.lock_queue:
+            if len(self.train_queue[0]) < MIN_BATCH:    # more thread could have passed without lock
+                return                                     # we can't yield inside lock
+
             s, a, r, s_, s_mask = self.train_queue
-            self.train_queue = [[], [], [], [], []]
+            self.train_queue = [ [], [], [], [], [] ]
 
         s = np.vstack(s)
         a = np.vstack(a)
         r = np.vstack(r)
         s_ = np.vstack(s_)
-        s_mask = np.vstack(s_mask)
+        s_mask = np.vstack(s_mask);print("OPTIMIZING")
+        if len(s) > 5*MIN_BATCH: print("Optimizer alert! Minimizing batch of %d" % len(s))
 
-        v = self.v_predict(s_)
-        r = r + (GAMMA ** NUM_STEP_RETURN) * v *s_mask
-
+        v = self.predict_v(s_)
+        r = r + (GAMMA ** NUM_STEP_RETURN) * v * s_mask    # set v to 0 where s_ is terminal state
+        
         s_t, a_t, r_t, minimize = self.graph
-        self.session.run(minimize, feed_dict = {s_t: s, a_t: a, r_t: r})
+        self.session.run(minimize, feed_dict={s_t: s, a_t: a, r_t: r})
 
 
     def predict(self, s):
@@ -131,6 +178,7 @@ class Policy:
 
 #policy needs to be global to manage multiple agents
 #frames needs to be global
+frames = 0
 class Agent:
     """Agent that acts based of a policy"""
     #If an episode ends in <NUM_STEPS_RETURN than the computation is incorrect
@@ -212,6 +260,49 @@ class Optimizer(threading.Thread):
     def stop(self):
         self.stop_signal = True
 
+
+
+
+class Enviroment(threading.Thread):
+    """"Enviroment for running A3C agents"""
+
+    stop_signal = False
+
+    def __init__(self,render=True, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS ):
+        threading.Thread.__init__(self)
+
+        self.redner = render
+        self.env = gym.make(ENV)
+        self.agent = Agent(eps_start,eps_end,eps_steps)
+        print("MADE IT HERE")
+
+    def run(self):
+        while not self.stop_signal:
+            self.runEpisode()
+
+    def runEpisode(self):
+         s = self.env.reset()
+         R = 0
+         print("BEFORE")
+         while True:
+             time.sleep(THREAD_DELAY)
+             if self.render:
+                 self.env.render()
+
+             a = self.agent.act(s)
+             s_, r, done, info = self.env.step(a)
+
+             if done:
+                 s_ = None
+             self.agent.train(s,a,r,s_)
+             s = s_
+             R += r
+             if done or self.stop_signal:
+                 break
+         print("Total R:", R)
+    def stop(self):
+        self.stop_signal = True
+
 #main program here
 
 env_test = Enviroment(Agent, eps_start = 0., eps_end = 0.)
@@ -224,10 +315,12 @@ NONE_STATE = np.zeros(NUM_STATE)
 policy = Policy()
 
 
-envs = [Enviroment(Agent) for i in range(THREADS)]
+envs = [Enviroment() for i in range(THREADS)]
 opts = [Optimizer() for i in range(OPTIMIZERS)]
 
 
+print("RUNNING")
+print(len(opts))
 for o in opts:
     o.run()
 
