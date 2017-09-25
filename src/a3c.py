@@ -2,11 +2,12 @@ import time,threading
 import random
 import numpy as np
 import gym
+import ppaquette_gym_doom
 from keras.models import *
 from keras.layers import *
 from keras import backend as K
 import tensorflow as tf
-ENV = 'CartPole-v0'
+ENV = 'ppaquette/DoomBasic-v0'
 
 
 
@@ -76,6 +77,12 @@ class Policy:
 
 
         model =  Model(inputs=[input_l],outputs=[actions_out,value_out])
+
+#----------------------------------------------------
+        #conv1 = Conv2D(filters=32,kernel_size=3,strides=2,activation='elu',input_shape = (None,NUM_STATE))
+   
+
+        #model = Model(inputs=[conv1], outputs = [conv1])
         model._make_predict_function() #necessary to call model from multiple threads
 
         return model
@@ -90,6 +97,7 @@ class Policy:
         #nstep reward
         r_t = tf.placeholder(tf.float32, shape=(None,1))
 
+        #fyi using keras functional api 
         p,v = model(s_t)
 
         #constant added to prevent NaN if probability was 0
@@ -107,6 +115,8 @@ class Policy:
         lreg = tf.reduce_mean(loss_policy + loss_value + entropy)
 
         optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE,decay = .99)
+        #optimizes default graph using this optimizer
+        #feeding it with a loss function and having a keras model set as default will allow the optimizer to train the global variables in the session
         minimize = optimizer.minimize(lreg)
 
         return s_t, a_t, r_t, minimize
@@ -178,17 +188,22 @@ class Policy:
 
     def predict(self, s):
         with self.default_graph.as_default():
-
+            print("STATE SHAPE AND STATE {}\n {}\n ".format(s.shape,s))
+            quit()
             return self.model.predict(s)
 
     def predict_v(self, s):
         with self.default_graph.as_default():
+            print("STATE SHAPE AND STATE {}\n {}\n ".format(s.shape,s))
+            quit()
  
             p,v = self.model.predict(s)
             return v
 
     def predict_p(self,s):
         with self.default_graph.as_default():
+            print("STATE SHAPE AND STATE {}\n {}\n ".format(s.shape,s))
+            quit()
 
             p,v = self.model.predict(s)
             return p
