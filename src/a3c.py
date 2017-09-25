@@ -2,13 +2,11 @@ import time,threading
 import random
 import numpy as np
 import gym
-import ppaquette_gym_doom
 from keras.models import *
 from keras.layers import *
 from keras import backend as K
 import tensorflow as tf
-ENV = 'ppaquette/DoomBasic-v0'
-
+ENV = "SpaceInvaders-v0"
 
 
 RUN_TIME = 30
