@@ -188,23 +188,15 @@ class Policy:
 
     def predict(self, s):
         with self.default_graph.as_default():
-            print("STATE SHAPE AND STATE {}\n {}\n ".format(s.shape,s))
-            quit()
             return self.model.predict(s)
 
     def predict_v(self, s):
         with self.default_graph.as_default():
-            print("STATE SHAPE AND STATE {}\n {}\n ".format(s.shape,s))
-            quit()
- 
             p,v = self.model.predict(s)
             return v
 
     def predict_p(self,s):
         with self.default_graph.as_default():
-            print("STATE SHAPE AND STATE {}\n {}\n ".format(s.shape,s))
-            quit()
-
             p,v = self.model.predict(s)
             return p
 
