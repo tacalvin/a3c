@@ -1,65 +1,54 @@
 import time,threading
-
 import gym
-#from a3c import Agent
+import gym_pull
 
-#-- constants
-ENV = 'CartPole-v0'
+def create_env(env_id, client_id, remotes, **kwargs):
+    if 'doom' in env_id.lower() or 'labyrinth' in env_id.lower():
+        return create_doom(env_id, client_id, **kwargs)
 
-RUN_TIME = 30
-THREADS = 8
-OPTIMIZERS = 2
-THREAD_DELAY = 0.001
-
-GAMMA = 0.99
-
-N_STEP_RETURN = 8
-GAMMA_N = GAMMA ** N_STEP_RETURN
-
-EPS_START = 0.4
-EPS_STOP  = .15
-EPS_STEPS = 75000
-
-MIN_BATCH = 32
-LEARNING_RATE = 5e-3
-
-LOSS_V = .5			# v loss coefficient
-LOSS_ENTROPY = .01 # entropy coefficient
-
-class Enviroment(threading.Thread):
-    """"Enviroment for running A3C agents"""
-
-    stop_signal = False
-
-    def __init__(self, Agent, render=True, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS ):
-        threading.Thread.__init__(self)
-
-        self.redner = render
-        self.env = gym.make(ENV)
-        self.agent = Agent(eps_start,eps_end,eps_steps)
-
-    def run(self):
-        while not self.stop_signal:
-            self.runEpisode()
-
-    def runEpisode(self):
-         s = self.env.reset()
-         while True:
-             time.sleep(THREAD_DELAY)
-             if self.render:
-                 self.env.render()
-
-             a = self.agent.act(s)
-             s_, r, done, info = self.env.step(a)
-
-             if done:
-                 s_ = None
-             self.agent.train(s,a,r,s_)
-             s = s_
-
-             if done or self.stop_signal:
-                 break
-    def stop(self):
-        self.stop_signal = True
+    #spec = gym.spec(env_id)
 
 
+def create_doom(env_id, client_id, env_wrap = True, record = False, outdir = None, no_life_reward = False, ac_repeat = 0, **_):
+    from ppaquette_gym_doom import wrappers
+
+    env_id_lower = env_id.lower()
+    if 'labyrinth' in env_id_lower:
+        if 'single' in env_id_lower:
+            env_id = 'ppaquette/LabyrinthSingle-v0'
+        elif 'fix' in env_id_lower:
+            env_id = 'ppaquette/LabyrinthManyFixed-v0'
+        else:
+            env_id = 'ppaquette/LabyrinthMany-v0'
+    elif 'very' in env_id.lower():
+        env_id = 'ppaquette/DoomMyWayHomeFixed15-v0'
+    elif 'sparse' in env_id.lower():
+        env_id = 'ppaquette/DoomMyWayHomeFixed-v0'
+    elif 'fix' in env_id.lower():
+        if '1' in env_id or '2' in env_id:
+            env_id = 'ppaquette/DoomMyWayHomeFixed' + str(env_id[-2:]) + '-v0'
+        elif 'new' in env_id.lower():
+            env_id = 'ppaquette/DoomMyWayHomeFixedNew-v0'
+        else:
+            env_id = 'ppaquette/DoomMyWayHomeFixed-v0'
+    else:
+        env_id = 'ppaquette/DoomMyWayHome-v0'
+
+    # VizDoom workaround: Simultaneously launching multiple vizdoom processes
+    # makes program stuck, so use the global lock in multi-threading/processing
+
+    client_id = int(client_id)
+    time.sleep(client_id * 10)
+
+    env = gym.make(env_id)
+
+    modewrapper = wrappers.SetPlayingMode('algo')
+    obwrapper = wrappers.SetResolution('160x120')
+    acwrapper = wrappers.ToDiscrete('minimal')
+
+    env = acwrapper(obwrapper(modewrapper(env)))
+
+    env = Vectorize(env)
+    env = DiagnosticsInfo(env)
+    env = Unvectorize(env)
+    return env

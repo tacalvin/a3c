@@ -67,35 +67,33 @@ class Policy:
     #Why is the loss just the negative Objective Function J(PI)
     def build_model(self):
         #The model will have two outputs one for the action function and one for the value function
-        input_l = Input(batch_shape = (None,NUM_STATE))
-        dense_l = Dense(16,activation='relu')(input_l)
+        #input_l = Input(batch_shape = (None,NUM_STATE))
+        #dense_l = Dense(16,activation='relu')(input_l)
 
-        actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(dense_l)
-        value_out = Dense(1,activation = 'linear')(dense_l)
+        #actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(dense_l)
+        #value_out = Dense(1,activation = 'linear')(dense_l)
 
 
-        model =  Model(inputs=[input_l],outputs=[actions_out,value_out])
+        #model =  Model(inputs=[input_l],outputs=[actions_out,value_out])
 
 #----------------------------------------------------
-        #conv1 = Conv2D(filters=32,kernel_size=3,strides=2,activation='elu',input_shape = (None,NUM_STATE))
-   
 
-        #model = Model(inputs=[conv1], outputs = [conv1])
+        from model import ModelBuilder
+        model = ModelBuilder.buildLSTM(ob_space,ac_space,"spaceinvaders")
         model._make_predict_function() #necessary to call model from multiple threads
-
         return model
     def build_comp_graph(self, model):
         #create placegolders
 
         #state batch placeholder
-        s_t = tf.placeholder(tf.float32, shape=(None,NUM_STATE))
+        s_t = tf.placeholder(tf.float32, shape=(None,NUM_STATE,None,3))
         #one hot encoded actions placeholders
         a_t = tf.placeholder(tf.float32, shape=(None,NUM_ACTIONS))
 
         #nstep reward
         r_t = tf.placeholder(tf.float32, shape=(None,1))
 
-        #fyi using keras functional api 
+        #fyi using keras functional api
         p,v = model(s_t)
 
         #constant added to prevent NaN if probability was 0
@@ -177,6 +175,7 @@ class Policy:
         s_mask = np.vstack(s_mask);print("OPTIMIZING")
         if len(s) > 5*MIN_BATCH: print("Optimizer alert! Minimizing batch of %d" % len(s))
 
+        
         v = self.predict_v(s_)
         r = r + (GAMMA ** NUM_STEP_RETURN) * v * s_mask    # set v to 0 where s_ is terminal state
         
@@ -191,12 +190,15 @@ class Policy:
     def predict_v(self, s):
         with self.default_graph.as_default():
             p,v = self.model.predict(s)
-            return v
+            return v[-1]
 
     def predict_p(self,s):
         with self.default_graph.as_default():
             p,v = self.model.predict(s)
-            return p
+            #print("MP")
+            #print(len(m))
+            #Actions for space invaders is the last value of the prediction
+            return p[-1]
 
 #policy needs to be global to manage multiple agents
 #frames needs to be global
@@ -228,7 +230,10 @@ class Agent:
             return random.randint(0,NUM_ACTIONS-1)
         else:
             s = np.array([state])
-            p = policy.predict_p(s)[0]
+            p,v = policy.predict(s)
+            p = p[-1]
+            print(p.shape)
+            quit()
             a = np.random.choice(NUM_ACTIONS,p=p)
             return a
 
@@ -293,11 +298,12 @@ class Optimizer(threading.Thread):
 class Environment(threading.Thread):
     stop_signal = False
 
-    def __init__(self, render=False, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS):
+    def __init__(self, render=False, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS, id_num = 0):
         threading.Thread.__init__(self)
 
+        from env import create_env
         self.render = render
-        self.env = gym.make(ENV)
+        self.env = create_env('doom',id_num,None)
         self.agent = Agent(eps_start, eps_end, eps_steps)
 
     def runEpisode(self):
@@ -332,45 +338,7 @@ class Environment(threading.Thread):
     def stop(self):
         self.stop_signal = True
 
-# class Enviroment(threading.Thread):
-#     """"Enviroment for running A3C agents"""
 
-#     stop_signal = False
-
-#     def __init__(self,render=True, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS ):
-#         threading.Thread.__init__(self)
-
-#         self.redner = render
-#         self.env = gym.make(ENV)
-#         self.agent = Agent(eps_start,eps_end,eps_steps)
-#         print("MADE IT HERE")
-
-#     def run(self):
-#         while not self.stop_signal:
-#             self.runEpisode()
-
-#     def runEpisode(self):
-#          s = self.env.reset()
-#          R = 0
-#          print("BEFORE")
-#          while True:
-#              time.sleep(THREAD_DELAY)
-#              if self.render:
-#                  self.env.render()
-
-#              a = self.agent.act(s)
-#              s_, r, done, info = self.env.step(a)
-
-#              if done:
-#                  s_ = None
-#              self.agent.train(s,a,r,s_)
-#              s = s_
-#              R += r
-#              if done or self.stop_signal:
-#                  break
-#          print("Total R:", R)
-#     def stop(self):
-#         self.stop_signal = True
 
 #main program here
            
@@ -379,12 +347,15 @@ NUM_STATE = env_test.env.observation_space.shape[0]
 NUM_ACTIONS = env_test.env.action_space.n
 NONE_STATE = np.zeros(NUM_STATE)
 
+print(NUM_STATE)
+print(NUM_ACTIONS)
+
+quit()
+
+policy = Policy(ob_space,ac_space)
 
 
-policy = Policy()
-
-
-envs = [Environment() for i in range(THREADS)]
+envs = [Environment(id_num=i+1) for i in range(THREADS)]
 opts = [Optimizer() for i in range(OPTIMIZERS)]
 
 
