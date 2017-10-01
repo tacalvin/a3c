@@ -1,4 +1,6 @@
 import time,threading
+import env
+from env import create_env
 import random
 import numpy as np
 import gym
@@ -301,7 +303,6 @@ class Environment(threading.Thread):
     def __init__(self, render=False, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS, id_num = 0):
         threading.Thread.__init__(self)
 
-        from env import create_env
         self.render = render
         self.env = create_env('doom',id_num,None)
         self.agent = Agent(eps_start, eps_end, eps_steps)
