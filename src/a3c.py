@@ -14,8 +14,8 @@ ENV = "SpaceInvaders-v0"
 
 
 RUN_TIME = 30
-THREADS = 8
-OPTIMIZERS = 2
+THREADS = 2
+OPTIMIZERS = 1
 THREAD_DELAY = 0.001
 
 GAMMA = 0.99
@@ -61,43 +61,43 @@ class Policy:
         self.ob_space = ob_space
         self.ac_space = ac_space
 
-        #self.model = self.build_model()
-        #self.graph = self.build_comp_graph(self.model)
+        self.model = self.build_model()
+        self.graph = self.build_comp_graph(self.model)
 
-        #self.session.run(tf.global_variables_initializer())
-        #self.default_graph = tf.get_default_graph()
-        #self.default_graph.finalize() #to avoid modifications
+        self.session.run(tf.global_variables_initializer())
+        self.default_graph = tf.get_default_graph()
+        self.default_graph.finalize() #to avoid modifications
 
 
 
     #Why is the loss just the negative Objective Function J(PI)
     def build_model(self):
         #The model will have two outputs one for the action function and one for the value function
-        #input_l = Input(batch_shape = (None,NUM_STATE))
-        #dense_l = Dense(16,activation='relu')(input_l)
+        input_l = Input(shape = (None,NUM_STATE,None,None))
+        dense_l = Dense(16,activation='relu')(input_l)
 
-        #actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(dense_l)
-        #value_out = Dense(1,activation = 'linear')(dense_l)
+        actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(dense_l)
+        value_out = Dense(1,activation = 'linear')(dense_l)
 
 
         #model =  Model(inputs=[input_l],outputs=[actions_out,value_out])
 
 #----------------------------------------------------
         print(self.ob_space)
-        input_l = Input(batch_shape = self.ob_space)
-        conv1 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(input_l)
-        conv2 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv1)
-        conv3 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv2)
-        conv4 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv3)
-        flat_l = Flatten()(conv4)
-        linear_l = Dense(256, 'linear')(flat_l)
+        #input_l = Input(batch_shape = (None,NUM_STATE))
+        #conv1 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(input_l)
+        #conv2 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv1)
+        #conv3 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv2)
+        #conv4 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv3)
+        #flat_l = Flatten()(conv4)
+        #linear_l = Dense(256, activation='linear')(conv4)
 
-        linear_l = K.expand_dims(linear_l, [0])
+        #linear_l = K.expand_dims(linear_l, [0])
         
-        lstm_l = LSTM(256)
+        #lstm_l = LSTM(256)
 
-        actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(lstm_l)
-        value_out = Dense(1, activation = 'linear')(lstm_l)
+        #actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(linear_l)
+        #value_out = Dense(1, activation = 'linear')(linear_l)
 
         model = Model(inputs = [input_l], outputs = [actions_out, value_out])
 
@@ -251,6 +251,7 @@ class Agent:
             return random.randint(0,NUM_ACTIONS-1)
         else:
             s = np.array([state])
+            print(s.shape)
             p,v = policy.predict(s)
             p = p[-1]
             print("SHAPE OF P \n ", p.shape)
@@ -326,10 +327,6 @@ class Environment(threading.Thread):
         self.env = create_env('doom',id_num,None)
         self.agent = Agent(eps_start, eps_end, eps_steps)
 
-        print("GETTING STATE INFO")
-        print(self.env.reset())
-        print(self.env.reset().shape)
-        print("DONE")
 
     def runEpisode(self):
         s = self.env.reset()
@@ -340,12 +337,14 @@ class Environment(threading.Thread):
 
             if self.render: self.env.render()
 
+            print("State size", s.shape)
+            #quit()
             a = self.agent.act(s)
             s_, r, done, info = self.env.step(a)
-
+            print("STEP STATE SIZE {}".format(s_.shape))
+            quit()
             if done: # terminal state
                 s_ = None
-
             self.agent.train(s, a, r, s_)
 
             s = s_
@@ -374,12 +373,11 @@ NONE_STATE = np.zeros(NUM_STATE)
 
 print(NUM_STATE)
 print(NUM_ACTIONS)
-print(env_test.env.observation_space[-1])
 policy = Policy(env_test.env.observation_space.shape,NUM_ACTIONS)
 
 
-envs = [Environment(id_num=i+1) for i in range(THREADS)]
-opts = [Optimizer() for i in range(OPTIMIZERS)]
+envs = [Environment(id_num = 1)]# [Environment(id_num=i+1) for i in range(THREADS)]
+opts = [Optimizer()]#[Optimizer() for i in range(OPTIMIZERS)]
 
 
 print("RUNNING")
