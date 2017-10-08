@@ -8,6 +8,7 @@ from keras.models import *
 from keras.layers import *
 from keras import backend as K
 import tensorflow as tf
+#from model import *
 ENV = "SpaceInvaders-v0"
 
 
@@ -79,9 +80,23 @@ class Policy:
         #model =  Model(inputs=[input_l],outputs=[actions_out,value_out])
 
 #----------------------------------------------------
+        input_l = Input(batch_shape = (None,NUM_STATE,None,3))
+        conv1 = Conv2D(32,3,2,padding = 'same',activation = 'elu')(input_l)
+        conv2 = Conv2D(32,3,2,padding = 'same',activation = 'elu')(conv1)
+        conv3 = Conv2D(32,3,2,padding = 'same',activation = 'elu')(conv2)
+        conv4 = Conv2D(32,3,2,padding = 'same',activation = 'elu')(conv3)
+        flat_l = Flatten()(conv4)
+        linear_l = Dense(256, 'linear')(flat_l)
 
-        from model import ModelBuilder
-        model = ModelBuilder.buildLSTM(ob_space,ac_space,"spaceinvaders")
+        linear_l = K.expand_dims(linear_l, [0])
+        
+        lstm_l = LSTM(256)
+
+        actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(lstm_l)
+        value_out = Dense(1, activation = 'linear')(lstm_l)
+
+        model = Model(inputs = [input_l], outputs = [actions_out, value_out])
+
         model._make_predict_function() #necessary to call model from multiple threads
         return model
     def build_comp_graph(self, model):
@@ -234,8 +249,8 @@ class Agent:
             s = np.array([state])
             p,v = policy.predict(s)
             p = p[-1]
-            print(p.shape)
-            quit()
+            print("SHAPE OF P \n ", p.shape)
+          #  quit()
             a = np.random.choice(NUM_ACTIONS,p=p)
             return a
 
@@ -351,7 +366,7 @@ NONE_STATE = np.zeros(NUM_STATE)
 print(NUM_STATE)
 print(NUM_ACTIONS)
 
-quit()
+#quit()
 
 policy = Policy(ob_space,ac_space)
 
