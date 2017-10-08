@@ -4,6 +4,7 @@ from env import create_env
 import random
 import numpy as np
 import gym
+import gym.spaces
 from keras.models import *
 from keras.layers import *
 from keras import backend as K
@@ -53,17 +54,19 @@ class Policy:
     train_queue = [[], [], [], [], []]
     lock_queue = threading.Lock()
 
-    def __init__(self):
+    def __init__(self, ob_space, ac_space):
         self.session = tf.Session()
         K.set_session(self.session)
         K.manual_variable_initialization(True)
+        self.ob_space = ob_space
+        self.ac_space = ac_space
 
-        self.model = self.build_model()
-        self.graph = self.build_comp_graph(self.model)
+        #self.model = self.build_model()
+        #self.graph = self.build_comp_graph(self.model)
 
-        self.session.run(tf.global_variables_initializer())
-        self.default_graph = tf.get_default_graph()
-        self.default_graph.finalize() #to avoid modifications
+        #self.session.run(tf.global_variables_initializer())
+        #self.default_graph = tf.get_default_graph()
+        #self.default_graph.finalize() #to avoid modifications
 
 
 
@@ -80,11 +83,12 @@ class Policy:
         #model =  Model(inputs=[input_l],outputs=[actions_out,value_out])
 
 #----------------------------------------------------
-        input_l = Input(batch_shape = (None,NUM_STATE,None,3))
-        conv1 = Conv2D(32,3,2,padding = 'same',activation = 'elu')(input_l)
-        conv2 = Conv2D(32,3,2,padding = 'same',activation = 'elu')(conv1)
-        conv3 = Conv2D(32,3,2,padding = 'same',activation = 'elu')(conv2)
-        conv4 = Conv2D(32,3,2,padding = 'same',activation = 'elu')(conv3)
+        print(self.ob_space)
+        input_l = Input(batch_shape = self.ob_space)
+        conv1 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(input_l)
+        conv2 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv1)
+        conv3 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv2)
+        conv4 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv3)
         flat_l = Flatten()(conv4)
         linear_l = Dense(256, 'linear')(flat_l)
 
@@ -322,6 +326,11 @@ class Environment(threading.Thread):
         self.env = create_env('doom',id_num,None)
         self.agent = Agent(eps_start, eps_end, eps_steps)
 
+        print("GETTING STATE INFO")
+        print(self.env.reset())
+        print(self.env.reset().shape)
+        print("DONE")
+
     def runEpisode(self):
         s = self.env.reset()
 
@@ -365,10 +374,8 @@ NONE_STATE = np.zeros(NUM_STATE)
 
 print(NUM_STATE)
 print(NUM_ACTIONS)
-
-#quit()
-
-policy = Policy(ob_space,ac_space)
+print(env_test.env.observation_space[-1])
+policy = Policy(env_test.env.observation_space.shape,NUM_ACTIONS)
 
 
 envs = [Environment(id_num=i+1) for i in range(THREADS)]
