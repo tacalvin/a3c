@@ -61,7 +61,7 @@ class Policy:
         self.ob_space = ob_space
         self.ac_space = ac_space
 
-        self.model = self.build_model()
+        self.model = self.build_model()#LSTMmodel(ob_space,ac_space,'doom')
         self.graph = self.build_comp_graph(self.model)
 
         self.session.run(tf.global_variables_initializer())
@@ -73,11 +73,11 @@ class Policy:
     #Why is the loss just the negative Objective Function J(PI)
     def build_model(self):
         #The model will have two outputs one for the action function and one for the value function
-        input_l = Input(shape = (None,NUM_STATE,None,None))
-        dense_l = Dense(16,activation='relu')(input_l)
+        input_l = Input(batch_shape = (None,NUM_STATE,NUM_STATE,4))
+        #dense_l = Dense(16,activation='relu')(input_l)
 
-        actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(dense_l)
-        value_out = Dense(1,activation = 'linear')(dense_l)
+        #actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(dense_l)
+        #value_out = Dense(1,activation = 'linear')(dense_l)
 
 
         #model =  Model(inputs=[input_l],outputs=[actions_out,value_out])
@@ -85,19 +85,19 @@ class Policy:
 #----------------------------------------------------
         print(self.ob_space)
         #input_l = Input(batch_shape = (None,NUM_STATE))
-        #conv1 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(input_l)
-        #conv2 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv1)
-        #conv3 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv2)
-        #conv4 = Conv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu')(conv3)
+        conv1 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(input_l)
+        #conv2 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(conv1)
+        #conv3 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(conv2)
+        #conv4 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(conv3)
         #flat_l = Flatten()(conv4)
-        #linear_l = Dense(256, activation='linear')(conv4)
+        linear_l = Dense(256, activation='linear')(conv1)
 
         #linear_l = K.expand_dims(linear_l, [0])
         
         #lstm_l = LSTM(256)
 
-        #actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(linear_l)
-        #value_out = Dense(1, activation = 'linear')(linear_l)
+        actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(linear_l)
+        value_out = Dense(1, activation = 'linear')(linear_l)
 
         model = Model(inputs = [input_l], outputs = [actions_out, value_out])
 
@@ -107,7 +107,7 @@ class Policy:
         #create placegolders
 
         #state batch placeholder
-        s_t = tf.placeholder(tf.float32, shape=(None,NUM_STATE,None,3))
+        s_t = tf.placeholder(tf.float32, shape=(None,NUM_STATE,None,4))
         #one hot encoded actions placeholders
         a_t = tf.placeholder(tf.float32, shape=(None,NUM_ACTIONS))
 
@@ -115,6 +115,7 @@ class Policy:
         r_t = tf.placeholder(tf.float32, shape=(None,1))
 
         #fyi using keras functional api
+        print("STATE s_t ", s_t)
         p,v = model(s_t)
 
         #constant added to prevent NaN if probability was 0
@@ -154,29 +155,6 @@ class Policy:
                 self.train_queue[3].append(s_)
                 self.train_queue[4].append(1.)
     def optimize(self):
-        #if len(self.train_queue[0]) < MIN_BATCH:
-        #    time.sleep(0) #Yield here
-        #    return
-        #print("MADE IT")
-        #with self.lock_queue:
-        #    if len(self.train_queue[0]) < MIN_BATCH:
-        #        return
-
-        #    s, a, r, s_, s_mask = self.train_queue
-        #    self.train_queue = [[], [], [], [], []]
-
-        #s = np.vstack(s)
-        #a = np.vstack(a)
-        #r = np.vstack(r)
-        #s_ = np.vstack(s_)
-        #s_mask = np.vstack(s_mask);print("Optimizing")
-
-        #v = self.predict_v(s_)
-        #r = r + (GAMMA ** NUM_STEP_RETURN) * v *s_mask
-
-        #s_t, a_t, r_t, minimize = self.graph
-        #print("Presesh")
-        #self.session.run(minimize, feed_dict = {s_t: s, a_t: a, r_t: r})
 
         if len(self.train_queue[0]) < MIN_BATCH:
             time.sleep(0)    # yield
@@ -251,7 +229,7 @@ class Agent:
             return random.randint(0,NUM_ACTIONS-1)
         else:
             s = np.array([state])
-            print(s.shape)
+            print("Stae SHAPE ",s.shape)
             p,v = policy.predict(s)
             p = p[-1]
             print("SHAPE OF P \n ", p.shape)
@@ -373,6 +351,7 @@ NONE_STATE = np.zeros(NUM_STATE)
 
 print(NUM_STATE)
 print(NUM_ACTIONS)
+print(env_test.env.observation_space.shape)
 policy = Policy(env_test.env.observation_space.shape,NUM_ACTIONS)
 
 

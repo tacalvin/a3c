@@ -62,7 +62,7 @@ def create_doom(env_id, client_id, envWrap=True, record=False, outdir=None,
     time.sleep(client_id * 10)
     env = gym.make(env_id)
     modewrapper = wrappers.SetPlayingMode('algo')
-    obwrapper = wrappers.SetResolution('160x120')
+    obwrapper = wrappers.SetResolution('320x240')
     acwrapper = wrappers.ToDiscrete('minimal')
     env = acwrapper(env)
     env = obwrapper(env)
