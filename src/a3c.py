@@ -115,7 +115,6 @@ class Policy:
         r_t = tf.placeholder(tf.float32, shape=(None,1))
 
         #fyi using keras functional api
-        print("STATE s_t ", s_t)
         p,v = model(s_t)
 
         #constant added to prevent NaN if probability was 0
@@ -184,12 +183,17 @@ class Policy:
 
     def predict(self, s):
         with self.default_graph.as_default():
-            return self.model.predict(s)
+            p,v = self.model.predict(s)
+            print("PREDICTING")
+            print(np.argmax(p[0][-1][-1]))
+            print((v[0][-1][-1]))
+            quit()
+            return p[0][-1],v[0][-1]
 
     def predict_v(self, s):
         with self.default_graph.as_default():
             p,v = self.model.predict(s)
-            return v[-1]
+            return v[0][-1]
 
     def predict_p(self,s):
         with self.default_graph.as_default():
@@ -197,7 +201,7 @@ class Policy:
             #print("MP")
             #print(len(m))
             #Actions for space invaders is the last value of the prediction
-            return p[-1]
+            return p[0][-1]
 
 #policy needs to be global to manage multiple agents
 #frames needs to be global
@@ -229,12 +233,15 @@ class Agent:
             return random.randint(0,NUM_ACTIONS-1)
         else:
             s = np.array([state])
-            print("Stae SHAPE ",s.shape)
             p,v = policy.predict(s)
-            p = p[-1]
-            print("SHAPE OF P \n ", p.shape)
-          #  quit()
+            print("P AND V")
+            print(len(p))
+            print(len(v))
             a = np.random.choice(NUM_ACTIONS,p=p)
+            print("A")
+            print(type(a))
+            print(len(a))
+            quit()
             return a
 
     #Will grab the current state, action, reward and s_
@@ -351,7 +358,10 @@ NONE_STATE = np.zeros(NUM_STATE)
 
 print(NUM_STATE)
 print(NUM_ACTIONS)
-print(env_test.env.observation_space.shape)
+#print("ACTION SPACE")
+#for i in range(20):
+#    print(env_test.env.action_space.sample())
+#quit()
 policy = Policy(env_test.env.observation_space.shape,NUM_ACTIONS)
 
 
