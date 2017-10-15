@@ -1,0 +1,10 @@
+tensorflow==1.3.0
+gym.egg==info
+ppaquette_gym_doom==0.0.3
+numpy==1.13.1
+ppaquette_gym_super_mario.egg==info
+Keras==2.0.8
+Pillow==4.3.0
+gym==0.9.4
+ppaquette_gym_super_mario==0.0.7
+ansible_universe==1.11.23

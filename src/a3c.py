@@ -20,8 +20,8 @@ THREAD_DELAY = 0.001
 
 GAMMA = 0.99
 
-N_STEP_RETURN = 8
-GAMMA_N = GAMMA ** N_STEP_RETURN
+N_STEP_RETURN = 1
+
 
 EPS_START = 0.4
 EPS_STOP  = .15
@@ -31,9 +31,9 @@ MIN_BATCH = 32
 LEARNING_RATE = 5e-3
 
    # entropy coefficient
-RUN_TIME = 30
-THREADS = 8
-OPTIMIZERS = 2
+RUN_TIME = 320
+THREADS = 1
+OPTIMIZERS = 1
 THREAD_DELAY = 0.001
 
 
@@ -43,7 +43,7 @@ THREAD_DELAY = 0.001
 
 
 GAMMA = .99
-NUM_STEP_RETURN = 8
+NUM_STEP_RETURN = 1
 L_VC = .5 #coefficient for loss of value function
 L_E = .01 #coefficient for entropy
 
@@ -61,8 +61,9 @@ class Policy:
         self.ob_space = ob_space
         self.ac_space = ac_space
 
-        self.model = self.build_model()#LSTMmodel(ob_space,ac_space,'doom')
-        self.graph = self.build_comp_graph(self.model)
+        self.model_p, self.model_v = self.build_model()#LSTMmodel(ob_space,ac_space,'doom')
+        
+        self.graph = self.build_comp_graph(self.model_p, self.model_v)
 
         self.session.run(tf.global_variables_initializer())
         self.default_graph = tf.get_default_graph()
@@ -73,7 +74,7 @@ class Policy:
     #Why is the loss just the negative Objective Function J(PI)
     def build_model(self):
         #The model will have two outputs one for the action function and one for the value function
-        input_l = Input(batch_shape = (None,NUM_STATE,NUM_STATE,4))
+        input_l = Input(batch_shape = (None,None,None,NUM_STATE))
         #dense_l = Dense(16,activation='relu')(input_l)
 
         #actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(dense_l)
@@ -83,44 +84,58 @@ class Policy:
         #model =  Model(inputs=[input_l],outputs=[actions_out,value_out])
 
 #----------------------------------------------------
-        print(self.ob_space)
         #input_l = Input(batch_shape = (None,NUM_STATE))
         conv1 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(input_l)
-        #conv2 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(conv1)
-        #conv3 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(conv2)
-        #conv4 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(conv3)
+        conv2 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(conv1)
+        conv3 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(conv2)
+        conv4 = SeparableConv2D(32,kernel_size=3,strides=2,padding = 'same',activation = 'elu',depth_multiplier=4)(conv3)
         #flat_l = Flatten()(conv4)
-        linear_l = Dense(256, activation='linear')(conv1)
+        linear_l = Dense(256, activation='linear')(conv4)
+        #linear_l = Reshape(linear_l.shape[1:], 3)(linear_l)
 
         #linear_l = K.expand_dims(linear_l, [0])
         
-        #lstm_l = LSTM(256)
+        #lstm_l = LSTM(256)(flat_l)
 
         actions_out = Dense(NUM_ACTIONS, activation = 'softmax')(linear_l)
         value_out = Dense(1, activation = 'linear')(linear_l)
 
-        model = Model(inputs = [input_l], outputs = [actions_out, value_out])
+        model_p = Model(inputs = input_l, outputs = actions_out)
+        model_v = Model(inputs = input_l, outputs = value_out)
 
-        model._make_predict_function() #necessary to call model from multiple threads
-        return model
-    def build_comp_graph(self, model):
+        #model._make_predict_function() #necessary to call model from multiple threads
+        model_p._make_predict_function()
+        model_v._make_predict_function()
+        return model_p, model_v
+
+    def build_comp_graph(self, model_p, model_v):
+        
         #create placegolders
 
         #state batch placeholder
-        s_t = tf.placeholder(tf.float32, shape=(None,NUM_STATE,None,4))
+        s_t = tf.placeholder(tf.float32, shape=(None,None,None,NUM_STATE))
         #one hot encoded actions placeholders
-        a_t = tf.placeholder(tf.float32, shape=(None,NUM_ACTIONS))
+        a_t = tf.placeholder(tf.float32, shape=(None,None,None,NUM_ACTIONS))
 
         #nstep reward
         r_t = tf.placeholder(tf.float32, shape=(None,1))
 
         #fyi using keras functional api
-        p,v = model(s_t)
+        p = model_p(s_t)
+        v = model_v(s_t)
+        #p,v = model(s_t)
+
+        v = v[0][-1][-1]
 
         #constant added to prevent NaN if probability was 0
         log_prob = tf.log(tf.reduce_sum(p * a_t, axis = 1, keep_dims=True ) + 1e-10)
 
         #advantage function = A(S,A) = Q(S,A) - V(S)
+        #print(p[-1])
+        #print(v[-1])
+        #print(type(v))
+
+        #quit()
         advantage = r_t - v
 
         loss_policy = - log_prob * tf.stop_gradient(advantage)
@@ -131,6 +146,8 @@ class Policy:
         #lreg = 1/n sum H(pi(s))
         lreg = tf.reduce_mean(loss_policy + loss_value + entropy)
 
+
+        #attemp to use keras for optimization
         optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE,decay = .99)
         #optimizes default graph using this optimizer
         #feeding it with a loss function and having a keras model set as default will allow the optimizer to train the global variables in the session
@@ -143,10 +160,16 @@ class Policy:
     def train_push(self, s, a, r, s_):
         # print("PUSHING: {}".format(s.shape))
         with self.lock_queue:
-            self.train_queue[0].append(s)
+            #[s] is neccesary to prevent np from adding the elements together instead of stacking them
+            #print("PUSHING")
+            #print(a)
+            #print(r)
+            self.train_queue[0].append([s])
             self.train_queue[1].append(a)
             self.train_queue[2].append(r)
-
+            #print(np.vstack(self.train_queue[1]).shape)
+            #print(np.vstack(self.train_queue[2]).shape)
+            #quit()
             if s_ is None:
                 self.train_queue[3].append(NONE_STATE)
                 self.train_queue[4].append(0.)
@@ -175,33 +198,60 @@ class Policy:
 
         
         v = self.predict_v(s_)
-        r = r + (GAMMA ** NUM_STEP_RETURN) * v * s_mask    # set v to 0 where s_ is terminal state
+        #print("DEBUG")
+        #print(r.shape)
+        #print(v.shape)
+        #print(s_mask.shape)
         
-        s_t, a_t, r_t, minimize = self.graph
+        r = r + (GAMMA ** NUM_STEP_RETURN) * v * s_mask    # set v to 0 where s_ is terminal state
+        #quit()
+        s#_t, a_t, r_t, minimize = self.graph
+        ##s = s.reshape(1,-1,NUM_STATE,4)
+        #print(s)
+        #print(a)
+        #print(r)
+        quit()
+
         self.session.run(minimize, feed_dict={s_t: s, a_t: a, r_t: r})
 
 
+
+    # TODO: Needs to return the [-1][-1][-1] due to keras return format. will change this once more comfortable with pure tensorflow
     def predict(self, s):
         with self.default_graph.as_default():
-            p,v = self.model.predict(s)
-            print("PREDICTING")
-            print(np.argmax(p[0][-1][-1]))
-            print((v[0][-1][-1]))
-            quit()
-            return p[0][-1],v[0][-1]
+            s = np.array([s])
+            #print(s.shape)
+            p= self.model_p.predict(s)
+            v= self.model_v.predict(s)
+            #print("OUTPUT")
+            #print(p.shape)
+            #print(p[0].shape)
+            #print(p[-1].shape)
+            #print(p[2].shape)
+            #print(v[0][-1].shape)
+            #print(v[0][1])
+            #print(v[0][-1])
+
+            #quit()
+            return p,v
 
     def predict_v(self, s):
         with self.default_graph.as_default():
-            p,v = self.model.predict(s)
-            return v[0][-1]
+            s = np.array([s])
+            v = self.model_v.predict(s)
+            print("VSHAPE")
+            print(v.shape)
+            quit()
+            return v
 
     def predict_p(self,s):
         with self.default_graph.as_default():
-            p,v = self.model.predict(s)
+            s = np.array([s])
+            p = self.model_p.predict(s)
             #print("MP")
             #print(len(m))
             #Actions for space invaders is the last value of the prediction
-            return p[0][-1]
+            return p
 
 #policy needs to be global to manage multiple agents
 #frames needs to be global
@@ -232,16 +282,17 @@ class Agent:
         if random.random() < epsilon:
             return random.randint(0,NUM_ACTIONS-1)
         else:
-            s = np.array([state])
-            p,v = policy.predict(s)
-            print("P AND V")
-            print(len(p))
-            print(len(v))
-            a = np.random.choice(NUM_ACTIONS,p=p)
-            print("A")
-            print(type(a))
-            print(len(a))
-            quit()
+            #s = np.array([state])
+            p,v = policy.predict(state)
+            #print("PSHAPE")
+            #print(p[0][-1].shape)
+            #print(p[-1][-1].shape)
+            #print(p[0][-1])
+            #print(p[-1][-1])
+            #index because of return format of keras
+            #print("ACTING")
+            #print(p[0][-1][-1].shape)
+            a = np.random.choice(NUM_ACTIONS,p=p[0][-1][-1])
             return a
 
     #Will grab the current state, action, reward and s_
@@ -309,7 +360,8 @@ class Environment(threading.Thread):
         threading.Thread.__init__(self)
 
         self.render = render
-        self.env = create_env('doom',id_num,None)
+        #self.env = #gym.make(ENV)
+        self.env = create_env('mario',id_num,None)
         self.agent = Agent(eps_start, eps_end, eps_steps)
 
 
@@ -321,13 +373,11 @@ class Environment(threading.Thread):
             time.sleep(THREAD_DELAY) # yield 
 
             if self.render: self.env.render()
-
-            print("State size", s.shape)
+            #Somehow breaks 
+            #print("State size", s.shape)
             #quit()
             a = self.agent.act(s)
             s_, r, done, info = self.env.step(a)
-            print("STEP STATE SIZE {}".format(s_.shape))
-            quit()
             if done: # terminal state
                 s_ = None
             self.agent.train(s, a, r, s_)
@@ -352,25 +402,27 @@ class Environment(threading.Thread):
 #main program here
            
 env_test = Environment(render=True, eps_start = 0., eps_end = 0.)
-NUM_STATE = env_test.env.observation_space.shape[0]
+#last index because
+NUM_STATE = env_test.env.observation_space.shape[-1]
 NUM_ACTIONS = env_test.env.action_space.n
 NONE_STATE = np.zeros(NUM_STATE)
 
-print(NUM_STATE)
-print(NUM_ACTIONS)
 #print("ACTION SPACE")
 #for i in range(20):
 #    print(env_test.env.action_space.sample())
 #quit()
+#print(env_test.env.observation_space)
+#print(env_test.env.action_space)
+#print(NUM_STATE)
+#print(NUM_ACTIONS)
+#quit()
 policy = Policy(env_test.env.observation_space.shape,NUM_ACTIONS)
 
 
-envs = [Environment(id_num = 1)]# [Environment(id_num=i+1) for i in range(THREADS)]
-opts = [Optimizer()]#[Optimizer() for i in range(OPTIMIZERS)]
+envs = [Environment(id_num=i+1) for i in range(THREADS)]
+opts = [Optimizer() for i in range(OPTIMIZERS)]
 
 
-print("RUNNING")
-print(len(opts))
 for o in opts:
     o.start()
 
